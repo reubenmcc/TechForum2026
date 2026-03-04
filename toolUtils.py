@@ -26,6 +26,18 @@ CLAUDE_TOOLS = {
             "required": ["cash_flows"],
         },
     },
+    "local_irr": {
+        "name": "local_irr",
+        "description": "Calculates IRR given a list of cash flows and dates",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "cash_flows": {"type": "array", "items": {"type": "number"},
+                               "description": "Cash flow amounts (negative = outflow)"}
+            },
+            "required": ["cash_flows"],
+        },
+    },
     "database_query": {
         "name": "database_query",
         "description": "Queries a SQL database to retrieve stored information",
@@ -72,7 +84,7 @@ CLAUDE_TOOLS = {
 # SCENARIO TOOL SETS — define which tools are exposed per scenario
 # =============================================================================
 TOOL_SCENARIOS = {
-    "scenario_1": ["find_file_by_description", "calculate_irr"],
+    "scenario_1": ["find_file_by_description", "local_irr"],
     "scenario_2": ["database_query", "file_read", "python_execute"],
     "all": list(CLAUDE_TOOLS.keys()),
 }

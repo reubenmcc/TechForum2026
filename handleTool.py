@@ -50,10 +50,19 @@ FILE_READ_AGENT = AgentConfig(
     owns_tool=lambda tool_name, _: tool_name == "find_file_by_description",
 )
 
+IRR_AGENT = AgentConfig(
+    name="IRR_AGENT",
+    system_prompt=(
+        "When asked to calculate IRR"
+    ),
+    default_tool_kwargs={},
+    owns_tool=lambda tool_name, _: tool_name == "local_irr",
+)
+
 # Registry maps tool_id -> AgentConfig
 AGENT_REGISTRY: dict[str, AgentConfig] = {
     "find_file_by_description": FILE_READ_AGENT,
-    # Add future agents here:
+    "local_irr":IRR_AGENT
     # "database_query": DATABASE_AGENT,
     # "send_email": EMAIL_AGENT,
 }

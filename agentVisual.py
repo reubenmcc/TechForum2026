@@ -16,7 +16,7 @@ import threading
 from createAgent import create
 from toolUtils import CLAUDE_TOOLS, get_tools_for_scenario
 from filereadAgent import handle_tool_call
-from handleTool import AgentConversationHandler
+from handleTool import AgentConversationHandler, AGENT_REGISTRY
 
 try:
     import anthropic
@@ -44,6 +44,7 @@ SIMULATED_RESULTS = {
 TOOLS = [
     {"id": "find_file_by_description", "name": "Get Document",   "icon": "🔢", "description": "Retrieves file based on description"},
     {"id": "calculate_irr",  "name": "Calculate IRR",    "icon": "📈", "description": "Calculates IRR given a list of cash flows and dates"},
+    {"id": "local_irr",      "name": "Local IRR",        "icon": "📈", "description": "Calculates IRR locally using Brent's method"},
     {"id": "database_query", "name": "Database Query",   "icon": "🗄️", "description": "Queries a SQL database to retrieve stored information"},
     {"id": "send_email",     "name": "Send Email",       "icon": "📧", "description": "Sends emails to specified recipients"},
     {"id": "file_read",      "name": "File Reader",      "icon": "📄", "description": "Reads and retrieves content from files"},
@@ -69,7 +70,7 @@ SCENARIOS = [
             "the correct two-step sequence with no wasted calls."
         ),
         "query": "What is the IRR for Wholelife?",
-        "tools": ["find_file_by_description", "calculate_irr"],
+        "tools": ["find_file_by_description", "local_irr"],
         "outcome": "success",
         "explanation": (
             "Optimal 2-step path: cash flows fetched first, IRR calculated second. "
@@ -337,16 +338,39 @@ class AgentVisualizer(tk.Tk):
             w.destroy()
         self._tool_frames = {}
         tool_ids = scenario.get("tools", [t["id"] for t in TOOLS])
+
+        # Legend row
+        legend = tk.Frame(self._tools_panel, bg=THEME["sidebar_bg"], padx=10, pady=3)
+        legend.pack(fill="x")
+        for badge_text, badge_bg, badge_fg in [
+            ("⚡ Live", "#DCFCE7", "#15803D"),
+            ("🎭 Mock", "#F1F5F9", "#475569"),
+        ]:
+            tk.Label(legend, text=badge_text, bg=badge_bg, fg=badge_fg,
+                     font=("Helvetica", 7, "bold"), padx=5, pady=1).pack(side="left", padx=(0, 4))
+        tk.Label(legend, text="= execution type", bg=THEME["sidebar_bg"],
+                 fg=THEME["text_muted"], font=("Helvetica", 7)).pack(side="left")
+
         for tool in [t for t in TOOLS if t["id"] in tool_ids]:
+            is_live = tool["id"] in AGENT_REGISTRY and tool["id"] not in SIMULATED_RESULTS
+            badge_text = "⚡ Live" if is_live else "🎭 Mock"
+            badge_bg   = "#DCFCE7" if is_live else "#F1F5F9"
+            badge_fg   = "#15803D" if is_live else "#475569"
+
             f = tk.Frame(self._tools_panel, bg=THEME["sidebar_bg"], padx=10, pady=4)
             f.pack(fill="x")
             inner = tk.Frame(f, bg=THEME["panel_bg"],
                              highlightthickness=1, highlightbackground=THEME["border"])
             inner.pack(fill="x")
-            tk.Label(inner, text=f"{tool['icon']}  {tool['name']}",
+
+            header_row = tk.Frame(inner, bg=THEME["panel_bg"])
+            header_row.pack(fill="x", padx=8, pady=(4, 0))
+            tk.Label(header_row, text=f"{tool['icon']}  {tool['name']}",
                      bg=THEME["panel_bg"], fg=THEME["text"],
-                     font=("Helvetica", 10, "bold"),
-                     anchor="w", padx=8, pady=4).pack(fill="x")
+                     font=("Helvetica", 10, "bold"), anchor="w").pack(side="left")
+            tk.Label(header_row, text=badge_text, bg=badge_bg, fg=badge_fg,
+                     font=("Helvetica", 7, "bold"), padx=5, pady=1).pack(side="right")
+
             tk.Label(inner, text=tool["description"],
                      bg=THEME["panel_bg"], fg=THEME["text_muted"],
                      font=("Helvetica", 8), wraplength=190,
