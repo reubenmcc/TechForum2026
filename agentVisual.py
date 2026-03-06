@@ -35,6 +35,7 @@ SIMULATED_RESULTS = {
     "send_email": "Email delivered successfully (message-id: <abc123@mail.example.com>)",
     "file_read": "2,340 bytes read. First line: 'Q4 2025 Financial Report v2.1'",
     "python_execute": "stdout: Done\nreturn value: 0",
+    "documentLookup":"Sandra Kim has a 20-Year Term Life, with $750,000 in coverage"
 }
 
 
@@ -49,6 +50,7 @@ TOOLS = [
     {"id": "send_email",     "name": "Send Email",       "icon": "📧", "description": "Sends emails to specified recipients"},
     {"id": "file_read",      "name": "File Reader",      "icon": "📄", "description": "Reads and retrieves content from files"},
     {"id": "python_execute", "name": "Python Executor",  "icon": "🐍", "description": "Executes Python code snippets"},
+    {"id": "alfa_runner", "name": "MG-Alfa Runner",  "icon": "🔢", "description": "Executes MG-Alfa models"},
 ]
 
 
@@ -60,8 +62,65 @@ TOOLS = [
 #   • "steps"       — pre-built tool-call sequence; leave [] for Live-only scenarios
 # =============================================================================
 SCENARIOS = [
+    {   "id": 1,
+        "title": "Find insured documents",
+        "difficulty": "easy",
+        "description": (
+            "An insurance agent wants to find the status of an insured."
+        ),
+        "query": "Does Sandra Kim have an active Whole Life policy, and if so, what is the face amount?",
+        "tools": ["find_file_by_description"],
+        "outcome": "success",
+        "explanation": (
+            "Optimal 1-step path: the coverage summary is read by Claude to generate a prompt"
+            "No redundant or wrong-tool calls."
+        ),
+        "steps": [
+            {
+                "tool": "find_file_by_description",
+                "parameters": {},
+                "result": SIMULATED_RESULTS["documentLookup"],
+                "reasoning": "I need the coverge letter for Sandra Kim.",
+                "status": "success",
+            }
+        ],
+        "response": "",
+    },
     {
-        "id": 1,
+        "id": 2,
+        "title": "Find insured documents (extra tool)",
+        "difficulty": "easy",
+        "description": (
+            "An insurance agent wants to find the status of an insured. "
+            "A database tool is also available — watch how the agent tries it first before finding the right tool."
+        ),
+        "query": "Does Sandra Kim have an active Whole Life policy, and if so, what is the face amount?",
+        "tools": ["find_file_by_description", "database_query"],
+        "outcome": "wrong_tool",
+        "explanation": (
+            "Wrong tool choice: the agent queried the database first, but Sandra Kim's policy "
+            "is stored as a document. The correct single-step path was find_file_by_description."
+        ),
+        "steps": [
+            {
+                "tool": "database_query",
+                "parameters": {"sql": "SELECT * FROM policies WHERE insured_name = 'Sandra Kim'"},
+                "result": "0 rows returned. No policy record found for 'Sandra Kim' in the policies table.",
+                "reasoning": "I'll check the database first to see if Sandra Kim's policy details are stored there.",
+                "status": "wrong",
+            },
+            {
+                "tool": "find_file_by_description",
+                "parameters": {},
+                "result": SIMULATED_RESULTS["documentLookup"],
+                "reasoning": "Database returned nothing. The policy must be stored as a document — let me look it up.",
+                "status": "success",
+            },
+        ],
+        "response": "",
+    },
+    {
+        "id": 3,
         "title": "Profitability Lookup",
         "difficulty": "easy",
         "description": (
@@ -98,15 +157,14 @@ SCENARIOS = [
         "response": "",
     },
     {
-        "id": 2,
-        "title": "Report Email",
-        "difficulty": "hard",
+        "id": 4,
+        "title": "Profitability Extended",
+        "difficulty": "Medium",
         "description": (
-            "An agent must email a quarterly financial summary. The available tools are "
-            "database query, file reader, and email — but watch how it spirals, "
-            "re-querying the database and re-reading the same file before finally sending."
+            "An actuarial analyst needs the Internal Rate of Return for a line of bussiness. "
+            "However the cashflows do not exist yet. The LLM must run MG-ALFA before getting the cashflows."
         ),
-        "query": "Send the Q4 2025 financial summary to finance@company.com",
+        "query": "What is the IRR for Wholelife?",
         "tools": ["database_query", "file_read", "send_email"],
         "outcome": "spiral",
         "explanation": (
@@ -157,7 +215,7 @@ SCENARIOS = [
         "response": "",
     },
     {
-        "id": 3,
+        "id": 5,
         "title": "Portfolio Count",
         "difficulty": "medium",
         "description": (
@@ -198,7 +256,7 @@ SCENARIOS = [
         "response": "",
     },
     {
-        "id": 4,
+        "id": 6,
         "title": "Live Query",
         "difficulty": "easy",
         "description": (
@@ -774,7 +832,7 @@ class AgentVisualizer(tk.Tk):
             "difficulty": "easy",
             "description": self._scenario.get("description", ""),
             "query": self._query_var.get(),
-            "tools": [t["id"] for t in TOOLS],
+            "tools": self._scenario.get("tools", [t["id"] for t in TOOLS]),
             "outcome": "success",
             "explanation": (
                 f"Real Claude API response using claude-opus-4-6. "

@@ -78,14 +78,25 @@ CLAUDE_TOOLS = {
             "required": ["code"],
         },
     },
+    "alfa_runner": {
+        "name": "alfa_runner",
+        "description": "Runs MG-Alfa model",
+        "input_schema": {
+            "type": "object",
+            "properties": {"Line of Business name": {"type": "string", "description": "Begin MG-Alfa cashflow model"}},
+            "required": ["code"],
+        },
+    },
 }
 
 # =============================================================================
 # SCENARIO TOOL SETS — define which tools are exposed per scenario
 # =============================================================================
 TOOL_SCENARIOS = {
-    "scenario_1": ["find_file_by_description", "local_irr"],
-    "scenario_2": ["database_query", "file_read", "python_execute"],
+    "scenario_1": ["find_file_by_description"],
+    "scenario_2": ["find_file_by_description", "database_query"],
+    "scenario_3": ["find_file_by_description", "local_irr"],
+    "scenario_4": ["database_query", "file_read", "alfa_runner"],
     "all": list(CLAUDE_TOOLS.keys()),
 }
 
