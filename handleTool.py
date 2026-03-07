@@ -59,6 +59,19 @@ IRR_AGENT = AgentConfig(
     owns_tool=lambda tool_name, _: tool_name == "local_irr",
 )
 
+ALFA_Runner = AgentConfig(
+    name="alfa_runner",
+    system_prompt=(
+        "You are a helpful assistant with access to a document library. "
+        "When asked about financial or policy data, use find_file_by_description "
+        "to locate and retrieve the relevant file before answering. "
+        "Always base your answer on the actual file contents."
+    ),
+    default_tool_kwargs={"file_directory": "agentDocs"},
+    owns_tool=lambda tool_name, _: tool_name == "find_file_by_description",
+)
+
+
 # Registry maps tool_id -> AgentConfig
 AGENT_REGISTRY: dict[str, AgentConfig] = {
     "find_file_by_description": FILE_READ_AGENT,

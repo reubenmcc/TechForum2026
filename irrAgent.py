@@ -18,11 +18,11 @@ def local_irr(cash_flows: list[float]) -> float:
 
     try:
         irr = brentq(npv, -0.9999, 10.0, args=(cash_flows,))
-        return irr
+        return str(irr)
     except ValueError:
-        return float('nan')
+        return str('nan')
 
 if __name__ == "__main__":
     testCashflows = [-1000000,150000,175000,200000,225000,150000,150000]
     test = local_irr(testCashflows)
-    print("debug")
+    print(test)

@@ -35,7 +35,8 @@ SIMULATED_RESULTS = {
     "send_email": "Email delivered successfully (message-id: <abc123@mail.example.com>)",
     "file_read": "2,340 bytes read. First line: 'Q4 2025 Financial Report v2.1'",
     "python_execute": "stdout: Done\nreturn value: 0",
-    "documentLookup":"Sandra Kim has a 20-Year Term Life, with $750,000 in coverage"
+    "documentLookup":"Sandra Kim has a 20-Year Term Life, with $750,000 in coverage",
+    "alfa_runner": "MG-ALFA run complete. Cashflows written to /models/wholelife_cf_output.csv. Run ID: ALFA-2025-WL-001",
 }
 
 
@@ -50,7 +51,9 @@ TOOLS = [
     {"id": "send_email",     "name": "Send Email",       "icon": "📧", "description": "Sends emails to specified recipients"},
     {"id": "file_read",      "name": "File Reader",      "icon": "📄", "description": "Reads and retrieves content from files"},
     {"id": "python_execute", "name": "Python Executor",  "icon": "🐍", "description": "Executes Python code snippets"},
-    {"id": "alfa_runner", "name": "MG-Alfa Runner",  "icon": "🔢", "description": "Executes MG-Alfa models"},
+    {"id": "check_results_file", "name": "Check for cash flows",  "icon": "🔢", "description": "Check results for MG-Alfa models"},
+    {"id": "run_alfa", "name": "MG-Alfa Runner",  "icon": "🔢", "description": "Run MG-Alfa models"},
+    {"id": "read_output", "name": "MG-Alfa Output reader",  "icon": "📄", "description": "Check results for MG-Alfa models"},
 ]
 
 
@@ -124,12 +127,12 @@ SCENARIOS = [
         "title": "Profitability Lookup",
         "difficulty": "easy",
         "description": (
-            "An actuarial analyst needs the Internal Rate of Return for a line of bussiness. "
+            "An actuarial analyst needs the Internal Rate of Return for a line of business. "
             "Only get-cash-flow and IRR tools are available — watch how the agent picks "
             "the correct two-step sequence with no wasted calls."
         ),
         "query": "What is the IRR for Wholelife?",
-        "tools": ["find_file_by_description", "local_irr"],
+        "tools": ["check_results_file", "run_alfa", "read_output"],
         "outcome": "success",
         "explanation": (
             "Optimal 2-step path: cash flows fetched first, IRR calculated second. "
@@ -161,54 +164,51 @@ SCENARIOS = [
         "title": "Profitability Extended",
         "difficulty": "Medium",
         "description": (
-            "An actuarial analyst needs the Internal Rate of Return for a line of bussiness. "
+            "An actuarial analyst needs the Internal Rate of Return for a line of business. "
             "However the cashflows do not exist yet. The LLM must run MG-ALFA before getting the cashflows."
         ),
-        "query": "What is the IRR for Wholelife?",
-        "tools": ["database_query", "file_read", "send_email"],
+        "query": "What is the IRR for the entire block?",
+        "tools": ["check_results_file", "run_alfa", "read_output"],
         "outcome": "spiral",
         "explanation": (
-            "Tool spiraling detected: the agent queried the database twice and read the "
-            "same file twice. The optimal path was database_query → file_read → send_email."
+            "Tool spiraling detected: MG-ALFA was re-run twice and the database was queried "
+            "redundantly after the cashflows were already generated. "
+            "The optimal path was alfa_runner → file_read."
         ),
         "steps": [
             {
-                "tool": "database_query",
-                "parameters": {"sql": "SELECT * FROM reports WHERE period = 'Q4 2025'"},
-                "result": SIMULATED_RESULTS["database_query"],
-                "reasoning": "Query the database to locate the Q4 2025 financial report.",
+                "tool": "alfa_runner",
+                "parameters": {"line_of_business": "Wholelife", "projection_years": 30},
+                "result": SIMULATED_RESULTS["alfa_runner"],
+                "reasoning": "No cashflows exist yet. Running MG-ALFA to generate Wholelife projections.",
                 "status": "success",
             },
             {
                 "tool": "database_query",
-                "parameters": {"sql": "SELECT summary FROM reports WHERE period = 'Q4 2025' LIMIT 1"},
+                "parameters": {"sql": "SELECT * FROM cashflows WHERE lob = 'Wholelife'"},
                 "result": SIMULATED_RESULTS["database_query"],
-                "reasoning": "First query returned IDs but not the narrative text. Re-querying with a narrower filter.",
+                "reasoning": "Checking the database to confirm the cashflow output was stored.",
+                "status": "redundant",
+            },
+            {
+                "tool": "alfa_runner",
+                "parameters": {"line_of_business": "Wholelife", "projection_years": 30, "discount_rate": 0.05},
+                "result": SIMULATED_RESULTS["alfa_runner"],
+                "reasoning": "Results unclear — re-running MG-ALFA with an explicit discount rate to be sure.",
+                "status": "redundant",
+            },
+            {
+                "tool": "database_query",
+                "parameters": {"sql": "SELECT irr FROM cashflows WHERE lob = 'Wholelife' ORDER BY run_date DESC LIMIT 1"},
+                "result": SIMULATED_RESULTS["database_query"],
+                "reasoning": "Re-querying the database to retrieve IRR directly — maybe it was stored.",
                 "status": "redundant",
             },
             {
                 "tool": "file_read",
-                "parameters": {"path": "/reports/Q4_2025_financial.pdf"},
+                "parameters": {"path": "/models/wholelife_cf_output.csv"},
                 "result": SIMULATED_RESULTS["file_read"],
-                "reasoning": "Database has aggregates only. Reading the actual report file for the summary.",
-                "status": "success",
-            },
-            {
-                "tool": "file_read",
-                "parameters": {"path": "/reports/Q4_2025_financial.pdf"},
-                "result": SIMULATED_RESULTS["file_read"],
-                "reasoning": "Re-reading the file to confirm I captured the full content.",
-                "status": "redundant",
-            },
-            {
-                "tool": "send_email",
-                "parameters": {
-                    "to": "finance@company.com",
-                    "subject": "Q4 2025 Financial Summary",
-                    "body": "Please find the Q4 2025 financial summary below.\n\nTotal value: £131,700 across 3 positions.",
-                },
-                "result": SIMULATED_RESULTS["send_email"],
-                "reasoning": "All data gathered. Sending the email now.",
+                "reasoning": "Database does not have the IRR. Reading the MG-ALFA output file to extract cashflows.",
                 "status": "success",
             },
         ],

@@ -78,16 +78,62 @@ CLAUDE_TOOLS = {
             "required": ["code"],
         },
     },
-    "alfa_runner": {
-        "name": "alfa_runner",
-        "description": "Runs MG-Alfa model",
+    "check_results_file": {
+        "name": "check_results_file",
+        "description": " Check whether the Mg-Alfa output results file already exists for a given line of business. Always call this before run_alfa.",
         "input_schema": {
             "type": "object",
-            "properties": {"Line of Business name": {"type": "string", "description": "Begin MG-Alfa cashflow model"}},
-            "required": ["code"],
+            "properties": {
+                "lob_code": {
+                    "type": "string",
+                    "description": "Line-of-business code, e.g. TLIFE, WLIFE, FANN, LTC, GRP.",
+                },
+                "output_directory": {
+                    "type": "string",
+                    "description": "Root directory to look in. Defaults to '.'.",
+                },
+            },
+            "required": ["lob_code"],
         },
     },
-}
+    "run_alfa": {
+        "name": "run_alfa",
+        "description": " Execute the Mg-Alfa stochastic cash-flow model for a line of business.Only call this when check_results_file confirms no output file exists.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lob_code": {
+                    "type": "string",
+                    "description": "Line-of-business code to run.",
+                },
+                "output_directory": {
+                    "type": "string",
+                    "description": "Root directory for output. Defaults to '.'.",
+                },
+            },
+        },
+    },
+    "read_output": {
+        "name": "read_output",
+        "description": " Read the Mg-Alfa output file for a line of business and return its contents.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lob_code": {
+                    "type": "string",
+                    "description": "Line-of-business code whose output to read.",
+                },
+                "output_directory": {
+                    "type": "string",
+                    "description": "Root directory for output. Defaults to '.'.",
+                },
+            },
+            },
+        },
+    }
+
+
+
 
 # =============================================================================
 # SCENARIO TOOL SETS — define which tools are exposed per scenario
@@ -95,8 +141,8 @@ CLAUDE_TOOLS = {
 TOOL_SCENARIOS = {
     "scenario_1": ["find_file_by_description"],
     "scenario_2": ["find_file_by_description", "database_query"],
-    "scenario_3": ["find_file_by_description", "local_irr"],
-    "scenario_4": ["database_query", "file_read", "alfa_runner"],
+    "scenario_3": ["check_results_file", "run_alfa","read_output"],
+    "scenario_4": ["check_results_file", "run_alfa","read_output"],
     "all": list(CLAUDE_TOOLS.keys()),
 }
 
@@ -107,5 +153,6 @@ def get_tools_for_scenario(scenario) -> list:
     Args:
         scenario: a scenario name (str) from TOOL_SCENARIOS, or a list of tool name strings.
     """
+
     tool_names = TOOL_SCENARIOS[scenario] if isinstance(scenario, str) else scenario
     return [CLAUDE_TOOLS[name] for name in tool_names if name in CLAUDE_TOOLS]
