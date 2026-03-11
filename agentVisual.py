@@ -97,7 +97,7 @@ SCENARIOS = [
             "An insurance agent wants to find the status of an insured. "
             "A database tool is also available — watch how the agent tries it first before finding the right tool."
         ),
-        "query": "Does Sandra Kim have an active Whole Life policy, and if so, what is the face amount?",
+        "query": "What is the status of John Mercer's claim?",
         "tools": ["find_file_by_description", "database_query"],
         "outcome": "wrong_tool",
         "explanation": (
@@ -640,12 +640,19 @@ class AgentVisualizer(tk.Tk):
         box.pack(fill="x", padx=14, pady=2)
         tk.Label(box, text=label + ":", bg=bg, fg=THEME["text_muted"],
                  font=("Helvetica", 8, "bold"), anchor="w").pack(anchor="w")
-        tk.Label(box, text=text,
-                 bg=THEME["panel_bg"], fg=THEME["text"],
-                 font=("Courier New" if mono else "Helvetica", 9 if mono else 10,
-                       "italic" if italic else "normal"),
-                 anchor="w", justify="left", padx=8, pady=4,
-                 wraplength=580).pack(fill="x")
+        font_family = "Courier New" if mono else "Helvetica"
+        font_size = 9 if mono else 10
+        font_style = "italic" if italic else "normal"
+        lines = text.count("\n") + 1 if text else 1
+        widget = tk.Text(box, height=lines,
+                         bg=THEME["panel_bg"], fg=THEME["text"],
+                         font=(font_family, font_size, font_style),
+                         wrap="word", padx=8, pady=4,
+                         relief="flat", borderwidth=0,
+                         state="normal")
+        widget.insert("1.0", text)
+        widget.config(state="disabled")
+        widget.pack(fill="x")
 
     def _make_outcome_banner(self, parent, sc):
         colour = THEME["outcome"].get(sc["outcome"], THEME["text_muted"])
@@ -685,11 +692,16 @@ class AgentVisualizer(tk.Tk):
                      bg="#F8FAFC", fg=THEME["text_muted"],
                      font=("Helvetica", 9, "bold"),
                      anchor="w", padx=12).pack(fill="x")
-            tk.Label(banner, text=response_text,
-                     bg=THEME["panel_bg"], fg=THEME["text"],
-                     font=("Helvetica", 10),
-                     wraplength=680, justify="left",
-                     anchor="w", padx=12, pady=8).pack(fill="x", padx=12, pady=(0, 8))
+            lines = response_text.count("\n") + 1
+            resp_widget = tk.Text(banner, height=lines,
+                                  bg=THEME["panel_bg"], fg=THEME["text"],
+                                  font=("Helvetica", 10),
+                                  wrap="word", padx=12, pady=8,
+                                  relief="flat", borderwidth=0,
+                                  state="normal")
+            resp_widget.insert("1.0", response_text)
+            resp_widget.config(state="disabled")
+            resp_widget.pack(fill="x", padx=12, pady=(0, 8))
         tk.Frame(banner, bg="#F8FAFC", height=4).pack()
         return banner
 
