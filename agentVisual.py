@@ -94,6 +94,39 @@ SCENARIOS = [
         "title": "Find insured documents (extra tool)",
         "difficulty": "easy",
         "description": (
+            "Same question as Scenario 1, but now a database tool is also available — "
+            "watch how the agent tries it first before finding the right tool."
+        ),
+        "query": "Does Sandra Kim have an active Whole Life policy, and if so, what is the face amount?",
+        "tools": ["find_file_by_description", "database_query"],
+        "outcome": "wrong_tool",
+        "explanation": (
+            "Wrong tool choice: the agent queried the database first, but Sandra Kim's policy "
+            "is stored as a document. The correct single-step path was find_file_by_description."
+        ),
+        "steps": [
+            {
+                "tool": "database_query",
+                "parameters": {"sql": "SELECT * FROM policies WHERE insured_name = 'Sandra Kim'"},
+                "result": "0 rows returned. No policy record found for 'Sandra Kim' in the policies table.",
+                "reasoning": "I'll check the database first to see if Sandra Kim's policy details are stored there.",
+                "status": "wrong",
+            },
+            {
+                "tool": "find_file_by_description",
+                "parameters": {},
+                "result": SIMULATED_RESULTS["documentLookup"],
+                "reasoning": "Database returned nothing. The policy must be stored as a document — let me look it up.",
+                "status": "success",
+            },
+        ],
+        "response": "",
+    },
+    {
+        "id": 3,
+        "title": "Find insured documents (extra tool)",
+        "difficulty": "easy",
+        "description": (
             "An insurance agent wants to find the status of an insured. "
             "A database tool is also available — watch how the agent tries it first before finding the right tool."
         ),
@@ -123,7 +156,7 @@ SCENARIOS = [
         "response": "",
     },
     {
-        "id": 3,
+        "id": 4,
         "title": "Profitability Lookup",
         "difficulty": "easy",
         "description": (
@@ -160,7 +193,7 @@ SCENARIOS = [
         "response": "",
     },
     {
-        "id": 4,
+        "id": 5,
         "title": "Profitability Extended",
         "difficulty": "Medium",
         "description": (
