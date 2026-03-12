@@ -15,7 +15,7 @@ import json
 import threading
 from createAgent import create
 from toolUtils import CLAUDE_TOOLS, get_tools_for_scenario
-from filereadAgent import handle_tool_call
+from toolCalls import handle_tool_call
 from handleTool import AgentConversationHandler, AGENT_REGISTRY
 
 try:
@@ -124,39 +124,6 @@ SCENARIOS = [
     },
     {
         "id": 3,
-        "title": "Find insured documents (extra tool)",
-        "difficulty": "easy",
-        "description": (
-            "An insurance agent wants to find the status of an insured. "
-            "A database tool is also available — watch how the agent tries it first before finding the right tool."
-        ),
-        "query": "What is the status of John Mercer's claim?",
-        "tools": ["find_file_by_description", "database_query"],
-        "outcome": "wrong_tool",
-        "explanation": (
-            "Wrong tool choice: the agent queried the database first, but Sandra Kim's policy "
-            "is stored as a document. The correct single-step path was find_file_by_description."
-        ),
-        "steps": [
-            {
-                "tool": "database_query",
-                "parameters": {"sql": "SELECT * FROM policies WHERE insured_name = 'Sandra Kim'"},
-                "result": "0 rows returned. No policy record found for 'Sandra Kim' in the policies table.",
-                "reasoning": "I'll check the database first to see if Sandra Kim's policy details are stored there.",
-                "status": "wrong",
-            },
-            {
-                "tool": "find_file_by_description",
-                "parameters": {},
-                "result": SIMULATED_RESULTS["documentLookup"],
-                "reasoning": "Database returned nothing. The policy must be stored as a document — let me look it up.",
-                "status": "success",
-            },
-        ],
-        "response": "",
-    },
-    {
-        "id": 4,
         "title": "Profitability Lookup",
         "difficulty": "easy",
         "description": (
@@ -193,7 +160,7 @@ SCENARIOS = [
         "response": "",
     },
     {
-        "id": 5,
+        "id": 4,
         "title": "Profitability Extended",
         "difficulty": "Medium",
         "description": (
@@ -815,7 +782,7 @@ class AgentVisualizer(tk.Tk):
         try:
             from createAgent import create
             from toolUtils import get_tools_for_scenario
-            from filereadAgent import handle_tool_call
+            from toolCalls import handle_tool_call
             from handleTool import AgentConversationHandler
 
             client = create()
