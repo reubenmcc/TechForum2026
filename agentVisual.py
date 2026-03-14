@@ -30,7 +30,6 @@ SIMULATED_RESULTS = {
         "Cash flows for deal: [-1,000,000 (2024-01-01), +150,000 (2024-04-01), "
         "+175,000 (2024-07-01), +200,000 (2024-10-01), +225,000 (2025-01-01)]"
     ),
-    "calculate_irr": "IRR = 14.2% (annualised, XIRR method)",
     "database_query": "3 rows returned: id=101 val=42000 | id=102 val=38500 | id=103 val=51200",
     "send_email": "Email delivered successfully (message-id: <abc123@mail.example.com>)",
     "file_read": "2,340 bytes read. First line: 'Q4 2025 Financial Report v2.1'",
@@ -45,7 +44,6 @@ SIMULATED_RESULTS = {
 # =============================================================================
 TOOLS = [
     {"id": "find_file_by_description", "name": "Get Document",   "icon": "🔢", "description": "Retrieves file based on description"},
-    {"id": "calculate_irr",  "name": "Calculate IRR",    "icon": "📈", "description": "Calculates IRR given a list of cash flows and dates"},
     {"id": "local_irr",      "name": "Local IRR",        "icon": "📈", "description": "Calculates IRR locally using Brent's method"},
     {"id": "database_query", "name": "Database Query",   "icon": "🗄️", "description": "Queries a SQL database to retrieve stored information"},
     {"id": "send_email",     "name": "Send Email",       "icon": "📧", "description": "Sends emails to specified recipients"},
@@ -54,6 +52,7 @@ TOOLS = [
     {"id": "check_results_file", "name": "Check for cash flows",  "icon": "🔢", "description": "Check results for MG-Alfa models"},
     {"id": "run_alfa", "name": "MG-Alfa Runner",  "icon": "🔢", "description": "Run MG-Alfa models"},
     {"id": "read_output", "name": "MG-Alfa Output reader",  "icon": "📄", "description": "Check results for MG-Alfa models"},
+    {"id": "router", "name": "Router", "icon": "🔀", "description": "Classifies prompt intent and dispatches to the correct specialist agent"},
 ]
 
 
@@ -152,7 +151,7 @@ SCENARIOS = [
                     "cash_flows": [-1000000, 150000, 175000, 200000, 225000],
                     "dates": ["2024-01-01", "2024-04-01", "2024-07-01", "2024-10-01", "2025-01-01"],
                 },
-                "result": SIMULATED_RESULTS["calculate_irr"],
+                "result": "calculate_irr",
                 "reasoning": "Cash flows retrieved. I can now compute the IRR directly.",
                 "status": "success",
             },
@@ -216,6 +215,47 @@ SCENARIOS = [
     },
     {
         "id": 5,
+        "title": "Router Agent",
+        "difficulty": "medium",
+        "description": (
+            "A multi-agent routing pattern: a lightweight classifier first reads the prompt and "
+            "decides which specialist agent to call — a policy-lookup agent or an actuarial-model agent. "
+            "Watch how two separate LLM calls collaborate to answer a single question."
+        ),
+        "query": "Does Sandra Kim have an active Whole Life policy, and if so, what is the face amount?",
+        "tools": ["router", "find_file_by_description", "check_results_file", "run_alfa", "read_output"],
+        "outcome": "success",
+        "explanation": (
+            "Optimal multi-agent path: the router correctly classified the intent as POLICY_LOOKUP "
+            "and dispatched to the policy-lookup specialist, which retrieved the document in one call. "
+            "No redundant routing or wrong-agent dispatches."
+        ),
+        "steps": [
+            {
+                "tool": "router",
+                "parameters": {"prompt": "Does Sandra Kim have an active Whole Life policy, and if so, what is the face amount?"},
+                "result": "Intent classified: POLICY_LOOKUP → dispatching to policy-lookup specialist agent (claude-haiku-4-5).",
+                "reasoning": (
+                    "The prompt names a specific individual and asks about their policy details. "
+                    "This matches the POLICY_LOOKUP pattern, not a block-level actuarial query."
+                ),
+                "status": "success",
+            },
+            {
+                "tool": "find_file_by_description",
+                "parameters": {"description": "Sandra Kim Whole Life policy"},
+                "result": SIMULATED_RESULTS["documentLookup"],
+                "reasoning": (
+                    "Specialist agent: I need to locate Sandra Kim's policy document "
+                    "to answer questions about coverage and face amount."
+                ),
+                "status": "success",
+            },
+        ],
+        "response": "",
+    },
+    {
+        "id": 6,
         "title": "Portfolio Count",
         "difficulty": "medium",
         "description": (
@@ -256,7 +296,7 @@ SCENARIOS = [
         "response": "",
     },
     {
-        "id": 6,
+        "id": 7,
         "title": "Live Query",
         "difficulty": "easy",
         "description": (
@@ -341,6 +381,9 @@ class AgentVisualizer(tk.Tk):
         self._step = 0
         self._after_id = None
         self._active_id = SCENARIOS[0]["id"]
+        self._live_handler = None
+        self._live_claude_tools = None
+        self._live_tool_selection = {}  # tool_id -> bool, only used for Live scenario
 
         self._build_ui()
         self._load_scenario(SCENARIOS[0])
@@ -365,7 +408,7 @@ class AgentVisualizer(tk.Tk):
 
     # ---------------------------------------------------------------- sidebar
     def _build_sidebar(self, parent):
-        self._sidebar = tk.Frame(parent, bg=THEME["sidebar_bg"], width=240)
+        self._sidebar = tk.Frame(parent, bg=THEME["sidebar_bg"], width=280)
         self._sidebar.pack(side="left", fill="y")
         self._sidebar.pack_propagate(False)
 
@@ -396,6 +439,13 @@ class AgentVisualizer(tk.Tk):
             w.destroy()
         self._tool_frames = {}
         tool_ids = scenario.get("tools", [t["id"] for t in TOOLS])
+        is_live_scenario = scenario.get("id") == SCENARIOS[-1]["id"]
+
+        # Initialise selection state for the Live scenario (all on by default)
+        if is_live_scenario:
+            for tid in tool_ids:
+                if tid not in self._live_tool_selection:
+                    self._live_tool_selection[tid] = True
 
         # Legend row
         legend = tk.Frame(self._tools_panel, bg=THEME["sidebar_bg"], padx=10, pady=3)
@@ -415,25 +465,46 @@ class AgentVisualizer(tk.Tk):
             badge_bg   = "#DCFCE7" if is_live else "#F1F5F9"
             badge_fg   = "#15803D" if is_live else "#475569"
 
+            enabled = (not is_live_scenario) or self._live_tool_selection.get(tool["id"], True)
+            card_bg  = THEME["panel_bg"] if enabled else THEME["sidebar_bg"]
+            card_border = THEME["border"] if enabled else "#CBD5E1"
+            name_fg  = THEME["text"] if enabled else THEME["text_muted"]
+
             f = tk.Frame(self._tools_panel, bg=THEME["sidebar_bg"], padx=10, pady=4)
             f.pack(fill="x")
-            inner = tk.Frame(f, bg=THEME["panel_bg"],
-                             highlightthickness=1, highlightbackground=THEME["border"])
+            inner = tk.Frame(f, bg=card_bg,
+                             highlightthickness=1, highlightbackground=card_border)
             inner.pack(fill="x")
 
-            header_row = tk.Frame(inner, bg=THEME["panel_bg"])
+            header_row = tk.Frame(inner, bg=card_bg)
             header_row.pack(fill="x", padx=8, pady=(4, 0))
             tk.Label(header_row, text=f"{tool['icon']}  {tool['name']}",
-                     bg=THEME["panel_bg"], fg=THEME["text"],
+                     bg=card_bg, fg=name_fg,
                      font=("Helvetica", 10, "bold"), anchor="w").pack(side="left")
             tk.Label(header_row, text=badge_text, bg=badge_bg, fg=badge_fg,
                      font=("Helvetica", 7, "bold"), padx=5, pady=1).pack(side="right")
 
+            if is_live_scenario:
+                tog_bg = "#16A34A" if enabled else THEME["border"]
+                tog_fg = "white"
+                tog_txt = "✓" if enabled else "+"
+                tog_btn = tk.Button(header_row, text=tog_txt,
+                                    bg=tog_bg, fg=tog_fg,
+                                    font=("Helvetica", 8, "bold"),
+                                    relief="flat", padx=4, pady=0, cursor="hand2",
+                                    borderwidth=0)
+                tog_btn.pack(side="right", padx=(0, 4))
+                tog_btn.configure(command=lambda tid=tool["id"], btn=tog_btn, card=inner, hr=header_row, nl=None: self._toggle_live_tool(tid))
+
             tk.Label(inner, text=tool["description"],
-                     bg=THEME["panel_bg"], fg=THEME["text_muted"],
-                     font=("Helvetica", 8), wraplength=190,
+                     bg=card_bg, fg=THEME["text_muted"],
+                     font=("Helvetica", 8), wraplength=230,
                      anchor="w", justify="left", padx=8, pady=2).pack(fill="x")
             self._tool_frames[tool["id"]] = inner
+
+    def _toggle_live_tool(self, tool_id):
+        self._live_tool_selection[tool_id] = not self._live_tool_selection.get(tool_id, True)
+        self._update_tools_panel(self._scenario)
 
     # --------------------------------------------------------------- content
     def _build_content(self, parent):
@@ -499,6 +570,9 @@ class AgentVisualizer(tk.Tk):
         if self._after_id:
             self.after_cancel(self._after_id)
             self._after_id = None
+        if scenario.get("id") != 99:
+            self._live_handler = None
+            self._live_claude_tools = None
         self._scenario = scenario
         self._step = 0
         self._update_tools_panel(scenario)
@@ -604,6 +678,9 @@ class AgentVisualizer(tk.Tk):
         self._outcome_banner = self._make_outcome_banner(self._scroll_frame, sc)
         if sc["steps"] and self._step >= len(sc["steps"]):
             self._outcome_banner.pack(fill="x", pady=8)
+
+        # follow-up prompt area (shown after live runs complete)
+        self._followup_frame = self._make_followup_frame(self._scroll_frame)
 
     # ----------------------------------------------------------------- cards
     def _make_step_card(self, parent, num, step):
@@ -741,6 +818,8 @@ class AgentVisualizer(tk.Tk):
 
         if self._step >= len(sc["steps"]):
             self._outcome_banner.pack(fill="x", pady=8)
+            if self._live_handler is not None:
+                self._followup_frame.pack(fill="x", pady=(0, 8))
             self._canvas.update_idletasks()
             self._canvas.yview_moveto(1.0)
 
@@ -796,13 +875,15 @@ class AgentVisualizer(tk.Tk):
                 tool_handler=handle_tool_call,  # fallback for real tool calls
             )
 
-            result = handler.run(
-                query=query,
-                claude_tools=get_tools_for_scenario(self._scenario["tools"]),
-            )
+            selected_tool_ids = [
+                tid for tid in self._scenario["tools"]
+                if self._live_tool_selection.get(tid, True)
+            ]
+            claude_tools = get_tools_for_scenario(selected_tool_ids)
+            result = handler.run(query=query, claude_tools=claude_tools)
 
             if result.error:
-                self.after(0, lambda e=result.error: self._on_live_result([], e, "", {}))
+                self.after(0, lambda e=result.error: self._on_live_result([], e, "", {}, None, None))
                 return
 
             steps = result.steps
@@ -818,14 +899,16 @@ class AgentVisualizer(tk.Tk):
                     "status": "success",
                 }]
 
-            self.after(0, lambda s=steps, r=final_response, t=token_totals:
-            self._on_live_result(s, None, r, t))
+            self.after(0, lambda s=steps, r=final_response, t=token_totals, h=handler, ct=claude_tools:
+            self._on_live_result(s, None, r, t, h, ct))
 
         except Exception as exc:
-            self.after(0, lambda e=exc: self._on_live_result([], str(e), "", {}))
+            self.after(0, lambda e=exc: self._on_live_result([], str(e), "", {}, None, None))
 
-    def _on_live_result(self, steps, error, final_response="", token_totals=None):
+    def _on_live_result(self, steps, error, final_response="", token_totals=None, handler=None, claude_tools=None):
         self._live_btn.configure(state="normal", text="⚡ Run Live")
+        self._live_handler = handler
+        self._live_claude_tools = claude_tools
         if error:
             import tkinter.messagebox as mb
             mb.showerror("API Error", str(error))
@@ -849,6 +932,97 @@ class AgentVisualizer(tk.Tk):
             "explanation": (
                 f"Real Claude API response using claude-opus-4-6. "
                 f"The model made {len(steps)} tool call(s) to answer your query."
+            ),
+            "steps": steps,
+            "response": final_response,
+            "token_totals": token_totals or {},
+        }
+        self._load_scenario(live_scenario)
+        self._play_all()
+
+    # -------------------------------------------------- follow-up prompt
+    def _make_followup_frame(self, parent):
+        frame = tk.Frame(parent, bg=THEME["accent_light"],
+                         highlightthickness=1, highlightbackground=THEME["accent"])
+        tk.Label(frame, text="Follow-up Prompt",
+                 bg=THEME["accent_light"], fg=THEME["accent"],
+                 font=("Helvetica", 9, "bold"),
+                 anchor="w", padx=10, pady=2).pack(fill="x")
+        inner = tk.Frame(frame, bg=THEME["accent_light"])
+        inner.pack(fill="x", padx=10, pady=(0, 8))
+        self._followup_var = tk.StringVar()
+        entry = tk.Entry(inner, textvariable=self._followup_var,
+                         bg=THEME["panel_bg"], fg=THEME["text"],
+                         font=("Helvetica", 10),
+                         relief="flat", bd=0,
+                         insertbackground=THEME["accent"],
+                         highlightthickness=0)
+        entry.pack(side="left", fill="x", expand=True, padx=(0, 8), ipady=4)
+        entry.bind("<Return>", lambda _e: self._run_followup())
+        self._followup_btn = tk.Button(inner, text="Send ↩",
+                                       bg=THEME["accent"], fg="white",
+                                       font=("Helvetica", 9, "bold"), relief="flat",
+                                       padx=10, pady=4, cursor="hand2",
+                                       command=self._run_followup)
+        self._followup_btn.pack(side="left")
+        return frame
+
+    def _run_followup(self):
+        followup = self._followup_var.get().strip()
+        if not followup or self._live_handler is None:
+            return
+        self._followup_btn.configure(state="disabled", text="Running…")
+        self._live_btn.configure(state="disabled")
+        threading.Thread(
+            target=self._call_followup_api,
+            args=(followup, self._live_handler, self._live_claude_tools),
+            daemon=True,
+        ).start()
+
+    def _call_followup_api(self, followup, handler, claude_tools):
+        try:
+            result = handler.continue_conversation(followup, claude_tools)
+            if result.error:
+                self.after(0, lambda e=result.error: self._on_followup_result([], e, "", {}, handler, claude_tools))
+                return
+            steps = result.steps
+            final_response = result.final_response
+            token_totals = result.token_totals
+            if not steps:
+                steps = [{
+                    "tool": "python_execute",
+                    "parameters": {"note": "No tools called"},
+                    "result": "Claude responded directly without using any tools.",
+                    "reasoning": "The follow-up was answered without needing a tool.",
+                    "status": "success",
+                }]
+            self.after(0, lambda s=steps, r=final_response, t=token_totals, h=handler, ct=claude_tools:
+                       self._on_followup_result(s, None, r, t, h, ct))
+        except Exception as exc:
+            self.after(0, lambda e=exc: self._on_followup_result([], str(e), "", {}, handler, claude_tools))
+
+    def _on_followup_result(self, steps, error, final_response="", token_totals=None, handler=None, claude_tools=None):
+        self._live_handler = handler
+        self._live_claude_tools = claude_tools
+        self._live_btn.configure(state="normal", text="⚡ Run Live")
+        if error:
+            import tkinter.messagebox as mb
+            mb.showerror("API Error", str(error))
+            self._followup_btn.configure(state="normal", text="Send ↩")
+            return
+        followup_text = self._followup_var.get().strip()
+        self._followup_var.set("")
+        live_scenario = {
+            "id": 99,
+            "title": "Live Query (Follow-up)",
+            "difficulty": "easy",
+            "description": self._scenario.get("description", ""),
+            "query": followup_text,
+            "tools": self._scenario.get("tools", [t["id"] for t in TOOLS]),
+            "outcome": "success",
+            "explanation": (
+                f"Follow-up response using claude-opus-4-6. "
+                f"The model made {len(steps)} tool call(s)."
             ),
             "steps": steps,
             "response": final_response,

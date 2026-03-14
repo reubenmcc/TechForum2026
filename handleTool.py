@@ -212,6 +212,11 @@ class AgentConversationHandler:
                 b.text for b in response.content if hasattr(b, "text") and b.text
             ).strip()
 
+            # Persist conversation history for follow-up calls
+            messages.append({"role": "assistant", "content": response.content})
+            self._messages = messages
+            self._system_prompt = system_prompt
+
             return ConversationResult(
                 steps=steps,
                 final_response=final_response,
@@ -219,6 +224,82 @@ class AgentConversationHandler:
             )
 
         except Exception as exc:
+            self._messages = messages
+            self._system_prompt = system_prompt
+            return ConversationResult(
+                steps=steps,
+                final_response="",
+                token_totals={"input": total_input, "output": total_output},
+                error=str(exc),
+            )
+
+    def continue_conversation(self, followup: str, claude_tools: list[dict]) -> "ConversationResult":
+        """Continue an existing conversation with a follow-up user message."""
+        messages = getattr(self, "_messages", []) + [{"role": "user", "content": followup}]
+        system_prompt = getattr(self, "_system_prompt", self._build_system_prompt())
+        steps: list[dict] = []
+        total_input = 0
+        total_output = 0
+
+        try:
+            while True:
+                kwargs: dict = {
+                    "model": self.model,
+                    "max_tokens": self.max_tokens,
+                    "tools": claude_tools,
+                    "messages": messages,
+                }
+                if system_prompt:
+                    kwargs["system"] = system_prompt
+
+                response = self.client.messages.create(**kwargs)
+
+                call_input = response.usage.input_tokens
+                call_output = response.usage.output_tokens
+                total_input += call_input
+                total_output += call_output
+
+                tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
+
+                if response.stop_reason == "end_turn" or not tool_use_blocks:
+                    break
+
+                messages.append({"role": "assistant", "content": response.content})
+                tool_results = []
+
+                for block in tool_use_blocks:
+                    result_str = self._dispatch_tool(block.name, block.input)
+                    steps.append({
+                        "tool": block.name,
+                        "parameters": block.input,
+                        "result": result_str,
+                        "reasoning": "Claude selected this tool to handle the follow-up.",
+                        "status": "success",
+                        "tokens": {"input": call_input, "output": call_output},
+                    })
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": result_str,
+                    })
+
+                messages.append({"role": "user", "content": tool_results})
+
+            final_response = " ".join(
+                b.text for b in response.content if hasattr(b, "text") and b.text
+            ).strip()
+
+            messages.append({"role": "assistant", "content": response.content})
+            self._messages = messages
+
+            return ConversationResult(
+                steps=steps,
+                final_response=final_response,
+                token_totals={"input": total_input, "output": total_output},
+            )
+
+        except Exception as exc:
+            self._messages = messages
             return ConversationResult(
                 steps=steps,
                 final_response="",

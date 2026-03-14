@@ -1,87 +1,13 @@
 import anthropic
 import os
 from dotenv import load_dotenv
+from toolUtils import CLAUDE_TOOLS
 
 load_dotenv("keys.env")
 
 client =anthropic.Anthropic(
         api_key=os.environ["ANTHROPIC_API_KEY"],  # This is the default and can be omitted
 )
-
-# ── Tool definitions ──────────────────────────────────────────────────────────
-
-POLICY_LOOKUP_TOOLS = [
-    {
-        "name": "find_file_by_description",
-        "description": (
-            "Reads the prompt description and locates the correct policy file. "
-            "Use this to find information about a specific insured or policy."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "description": {
-                    "type": "string",
-                    "description": "The natural-language description from the prompt, e.g. 'Sandra Kim Whole Life policy'"
-                }
-            },
-            "required": ["description"]
-        }
-    }
-]
-
-MG_ALFA_TOOLS = [
-    {
-        "name": "check_results_file",
-        "description": "Check whether an MG-ALFA results file exists and is ready to read.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "file_path": {
-                    "type": "string",
-                    "description": "Path to the MG-ALFA results file to check."
-                }
-            },
-            "required": ["file_path"]
-        }
-    },
-    {
-        "name": "run_alfa",
-        "description": "Execute an MG-ALFA run for a given block or scenario.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "block_id": {
-                    "type": "string",
-                    "description": "Identifier for the block to run."
-                },
-                "scenario": {
-                    "type": "string",
-                    "description": "Scenario or assumption set to use for the run."
-                }
-            },
-            "required": ["block_id"]
-        }
-    },
-    {
-        "name": "read_output",
-        "description": "Read and parse MG-ALFA output files to extract metrics such as IRR, reserves, or cash flows.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "file_path": {
-                    "type": "string",
-                    "description": "Path to the MG-ALFA output file to read."
-                },
-                "metric": {
-                    "type": "string",
-                    "description": "Specific metric to extract, e.g. 'IRR', 'reserve', 'cash_flow'."
-                }
-            },
-            "required": ["file_path"]
-        }
-    }
-]
 
 # ── Specialist agents ─────────────────────────────────────────────────────────
 
@@ -96,7 +22,7 @@ def handle_policy_lookup(user_message: str) -> anthropic.types.Message:
             "with the full description from the user's prompt to locate the correct file, "
             "then answer the question based on what the file contains."
         ),
-        tools=POLICY_LOOKUP_TOOLS,
+        tools=[CLAUDE_TOOLS["find_file_by_description"]],
         messages=[{"role": "user", "content": user_message}]
     )
 
@@ -113,7 +39,7 @@ def handle_mga_alfa_query(user_message: str) -> anthropic.types.Message:
             "3. Use read_output to extract the specific metric requested. "
             "Present results clearly with any relevant context."
         ),
-        tools=MG_ALFA_TOOLS,
+        tools=[CLAUDE_TOOLS["check_results_file"], CLAUDE_TOOLS["run_alfa"], CLAUDE_TOOLS["read_output"]],
         messages=[{"role": "user", "content": user_message}]
     )
 
