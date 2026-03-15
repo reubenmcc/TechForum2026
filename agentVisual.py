@@ -256,47 +256,6 @@ SCENARIOS = [
     },
     {
         "id": 6,
-        "title": "Portfolio Count",
-        "difficulty": "medium",
-        "description": (
-            "A simple question: how many active deals are in the portfolio this quarter? "
-            "The agent has access to a database, file reader, and Python executor — "
-            "but reaches for the wrong tools before landing on the right one."
-        ),
-        "query": "How many active deals are in the portfolio this quarter?",
-        "tools": ["database_query", "file_read", "python_execute"],
-        "outcome": "wrong_tool",
-        "explanation": (
-            "Wrong tool choices: the agent tried python_execute and file_read before "
-            "realising a single database_query was all that was needed."
-        ),
-        "steps": [
-            {
-                "tool": "python_execute",
-                "parameters": {"code": "import portfolio\nprint(portfolio.count_active_deals('Q4-2025'))"},
-                "result": SIMULATED_RESULTS["python_execute"],
-                "reasoning": "I'll write a Python script to count active deals programmatically.",
-                "status": "wrong",
-            },
-            {
-                "tool": "file_read",
-                "parameters": {"path": "/data/portfolio_snapshot.csv"},
-                "result": SIMULATED_RESULTS["file_read"],
-                "reasoning": "Script didn't return useful data. Maybe a CSV snapshot has the count.",
-                "status": "wrong",
-            },
-            {
-                "tool": "database_query",
-                "parameters": {"sql": "SELECT COUNT(*) FROM deals WHERE status = 'active' AND quarter = 'Q4-2025'"},
-                "result": SIMULATED_RESULTS["database_query"],
-                "reasoning": "The database is the authoritative source — I should have started here.",
-                "status": "success",
-            },
-        ],
-        "response": "",
-    },
-    {
-        "id": 7,
         "title": "Live Query",
         "difficulty": "easy",
         "description": (
