@@ -9,6 +9,26 @@ client =anthropic.Anthropic(
         api_key=os.environ["ANTHROPIC_API_KEY"],  # This is the default and can be omitted
 )
 
+# ── Intent classifier (used by the router tool in toolCalls.py) ───────────────
+
+def classify_intent(user_message: str) -> str:
+    """Return the routing label (e.g. POLICY_LOOKUP or ACTUARIAL_MODEL) for a query."""
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=50,
+        system=(
+            "You are a routing classifier. Categorize the user's request as exactly one of:\n"
+            "  POLICY_LOOKUP  - questions about a specific individual, insured, or policy "
+            "(e.g. policy status, face amount, coverage details for a named person)\n"
+            "  ACTUARIAL_MODEL - questions about block-level or portfolio-level metrics that "
+            "require running or reading MG-ALFA output (e.g. IRR, reserves, cash flows for a block)\n\n"
+            "Respond with only the label — no explanation."
+        ),
+        messages=[{"role": "user", "content": user_message}],
+    )
+    return response.content[0].text.strip()
+
+
 # ── Specialist agents ─────────────────────────────────────────────────────────
 
 def handle_policy_lookup(user_message: str) -> anthropic.types.Message:

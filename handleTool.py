@@ -72,8 +72,20 @@ ALFA_Runner = AgentConfig(
 )
 
 
+ROUTER_AGENT = AgentConfig(
+    name="routerAgent",
+    system_prompt=(
+        "You are an orchestrator with access to specialist tools. "
+        "Always start by calling the 'router' tool with the user's complete query. "
+        "Then follow the routing instructions returned to call the appropriate specialist tools."
+    ),
+    default_tool_kwargs={},
+    owns_tool=lambda tool_name, _: tool_name == "router",
+)
+
 # Registry maps tool_id -> AgentConfig
 AGENT_REGISTRY: dict[str, AgentConfig] = {
+    "router": ROUTER_AGENT,
     "find_file_by_description": FILE_READ_AGENT,
     "local_irr":IRR_AGENT
     # "database_query": DATABASE_AGENT,

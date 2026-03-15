@@ -130,7 +130,21 @@ CLAUDE_TOOLS = {
             },
             },
         },
-    }
+    "router": {
+        "name": "router",
+        "description": (
+            "Orchestrator: classifies the user's query intent and returns which specialist agent "
+            "and tools to invoke. Always call this first before any other tool."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "prompt": {"type": "string", "description": "The user's query to classify and route"},
+            },
+            "required": ["prompt"],
+        },
+    },
+}
 
 
 
